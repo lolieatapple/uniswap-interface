@@ -1,5 +1,5 @@
 import { TransactionResponse } from '@ethersproject/abstract-provider'
-import { JSBI, Token, TokenAmount, WETH, Fraction, Percent } from '@uniswap/sdk'
+import { JSBI, Token, TokenAmount, WETH, Fraction, Percent, CurrencyAmount } from '@uniswap/sdk'
 import React, { useCallback, useMemo, useState } from 'react'
 import ReactGA from 'react-ga'
 import { Redirect, RouteComponentProps } from 'react-router'
@@ -49,16 +49,16 @@ function V1PairRemoval({
 
   const shareFraction: Fraction = totalSupply ? new Percent(liquidityTokenAmount.raw, totalSupply.raw) : ZERO_FRACTION
 
-  const ethWorth: Fraction = exchangeETHBalance
-    ? new Fraction(shareFraction.multiply(exchangeETHBalance).quotient, WEI_DENOM)
-    : ZERO_FRACTION
+  const ethWorth: CurrencyAmount = exchangeETHBalance
+    ? CurrencyAmount.ether(exchangeETHBalance.multiply(shareFraction).multiply(WEI_DENOM).quotient)
+    : CurrencyAmount.ether(ZERO)
 
   const tokenWorth: TokenAmount = exchangeTokenBalance
     ? new TokenAmount(token, shareFraction.multiply(exchangeTokenBalance.raw).quotient)
     : new TokenAmount(token, ZERO)
 
   const addTransaction = useTransactionAdder()
-  const isRemovalPending = useIsTransactionPending(pendingRemovalHash)
+  const isRemovalPending = useIsTransactionPending(pendingRemovalHash ?? undefined)
 
   const remove = useCallback(() => {
     if (!liquidityTokenAmount) return
@@ -79,11 +79,11 @@ function V1PairRemoval({
         })
 
         addTransaction(response, {
-          summary: `Remove ${token.equals(WETH[chainId]) ? 'WETH' : token.symbol}/ETH V1 liquidity`
+          summary: `Remove ${chainId && token.equals(WETH[chainId]) ? 'WETH' : token.symbol}/ETH V1 liquidity`
         })
         setPendingRemovalHash(response.hash)
       })
-      .catch(error => {
+      .catch((error: Error) => {
         console.error(error)
         setConfirmingRemoval(false)
       })
@@ -91,7 +91,7 @@ function V1PairRemoval({
 
   const noLiquidityTokens = !!liquidityTokenAmount && liquidityTokenAmount.equalTo(ZERO)
 
-  const isSuccessfullyRemoved = !!pendingRemovalHash && !!noLiquidityTokens
+  const isSuccessfullyRemoved = !!pendingRemovalHash && noLiquidityTokens
 
   return (
     <AutoColumn gap="20px">
@@ -119,7 +119,7 @@ function V1PairRemoval({
       </LightCard>
       <TYPE.darkGray style={{ textAlign: 'center' }}>
         {`Your Uniswap V1 ${
-          token.equals(WETH[chainId]) ? 'WETH' : token.symbol
+          chainId && token.equals(WETH[chainId]) ? 'WETH' : token.symbol
         }/ETH liquidity will be redeemed for underlying assets.`}
       </TYPE.darkGray>
     </AutoColumn>
@@ -140,12 +140,12 @@ export default function RemoveV1Exchange({
 
   const liquidityToken: Token | undefined = useMemo(
     () =>
-      validatedAddress && token
+      validatedAddress && chainId && token
         ? new Token(chainId, validatedAddress, 18, `UNI-V1-${token.symbol}`, 'Uniswap V1')
         : undefined,
     [chainId, validatedAddress, token]
   )
-  const userLiquidityBalance = useTokenBalance(account, liquidityToken)
+  const userLiquidityBalance = useTokenBalance(account ?? undefined, liquidityToken)
 
   // redirect for invalid url params
   if (!validatedAddress || tokenAddress === AddressZero) {
@@ -154,7 +154,7 @@ export default function RemoveV1Exchange({
   }
 
   return (
-    <BodyWrapper style={{ padding: 24 }}>
+    <BodyWrapper style={{ padding: 24 }} id="remove-v1-exchange">
       <AutoColumn gap="16px">
         <AutoRow style={{ alignItems: 'center', justifyContent: 'space-between' }} gap="8px">
           <BackArrow to="/migrate/v1" />
@@ -166,7 +166,7 @@ export default function RemoveV1Exchange({
 
         {!account ? (
           <TYPE.largeHeader>You must connect an account.</TYPE.largeHeader>
-        ) : userLiquidityBalance && token ? (
+        ) : userLiquidityBalance && token && exchangeContract ? (
           <V1PairRemoval
             exchangeContract={exchangeContract}
             liquidityTokenAmount={userLiquidityBalance}

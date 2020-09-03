@@ -1,7 +1,7 @@
-import { ChainId, JSBI, Percent, Token, WETH, Pair, TokenAmount } from '@uniswap/sdk'
+import { ChainId, JSBI, Percent, Token, WETH } from '@uniswap/sdk'
+import { AbstractConnector } from '@web3-react/abstract-connector'
 
 import { fortmatic, injected, portis, walletconnect, walletlink } from '../connectors'
-import { COMP, DAI, MKR, USDC, USDT } from './tokens/mainnet'
 
 export const ROUTER_ADDRESS = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'
 
@@ -9,6 +9,13 @@ export const ROUTER_ADDRESS = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'
 type ChainTokenList = {
   readonly [chainId in ChainId]: Token[]
 }
+
+export const DAI = new Token(ChainId.MAINNET, '0x6B175474E89094C44Da98b954EedeAC495271d0F', 18, 'DAI', 'Dai Stablecoin')
+export const USDC = new Token(ChainId.MAINNET, '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 6, 'USDC', 'USD//C')
+export const USDT = new Token(ChainId.MAINNET, '0xdAC17F958D2ee523a2206206994597C13D831ec7', 6, 'USDT', 'Tether USD')
+export const COMP = new Token(ChainId.MAINNET, '0xc00e94Cb662C3520282E6f5717214004A7f26888', 18, 'COMP', 'Compound')
+export const MKR = new Token(ChainId.MAINNET, '0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2', 18, 'MKR', 'Maker')
+export const AMPL = new Token(ChainId.MAINNET, '0xD46bA6D942050d489DBd938a2C909A5d5039A161', 9, 'AMPL', 'Ampleforth')
 
 const WETH_ONLY: ChainTokenList = {
   [ChainId.MAINNET]: [WETH[ChainId.MAINNET]],
@@ -24,6 +31,16 @@ export const BASES_TO_CHECK_TRADES_AGAINST: ChainTokenList = {
   [ChainId.MAINNET]: [...WETH_ONLY[ChainId.MAINNET], DAI, USDC, USDT, COMP, MKR]
 }
 
+/**
+ * Some tokens can only be swapped via certain pairs, so we override the list of bases that are considered for these
+ * tokens.
+ */
+export const CUSTOM_BASES: { [chainId in ChainId]?: { [tokenAddress: string]: Token[] } } = {
+  [ChainId.MAINNET]: {
+    [AMPL.address]: [DAI, WETH[ChainId.MAINNET]]
+  }
+}
+
 // used for display in the default list when adding liquidity
 export const SUGGESTED_BASES: ChainTokenList = {
   ...WETH_ONLY,
@@ -36,42 +53,30 @@ export const BASES_TO_TRACK_LIQUIDITY_FOR: ChainTokenList = {
   [ChainId.MAINNET]: [...WETH_ONLY[ChainId.MAINNET], DAI, USDC, USDT]
 }
 
-export const DUMMY_PAIRS_TO_PIN: { readonly [chainId in ChainId]?: Pair[] } = {
+export const PINNED_PAIRS: { readonly [chainId in ChainId]?: [Token, Token][] } = {
   [ChainId.MAINNET]: [
-    new Pair(
-      new TokenAmount(
-        new Token(ChainId.MAINNET, '0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643', 8, 'cDAI', 'Compound Dai'),
-        '0'
-      ),
-      new TokenAmount(
-        new Token(ChainId.MAINNET, '0x39AA39c021dfbaE8faC545936693aC917d5E7563', 8, 'cUSDC', 'Compound USD Coin'),
-        '0'
-      )
-    ),
-    new Pair(
-      new TokenAmount(
-        new Token(ChainId.MAINNET, '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 6, 'USDC', 'USD//C'),
-        '0'
-      ),
-      new TokenAmount(
-        new Token(ChainId.MAINNET, '0xdAC17F958D2ee523a2206206994597C13D831ec7', 6, 'USDT', 'Tether USD'),
-        '0'
-      )
-    ),
-    new Pair(
-      new TokenAmount(
-        new Token(ChainId.MAINNET, '0x6B175474E89094C44Da98b954EedeAC495271d0F', 18, 'DAI', 'Dai Stablecoin'),
-        '0'
-      ),
-      new TokenAmount(
-        new Token(ChainId.MAINNET, '0xdAC17F958D2ee523a2206206994597C13D831ec7', 6, 'USDT', 'Tether USD'),
-        '0'
-      )
-    )
+    [
+      new Token(ChainId.MAINNET, '0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643', 8, 'cDAI', 'Compound Dai'),
+      new Token(ChainId.MAINNET, '0x39AA39c021dfbaE8faC545936693aC917d5E7563', 8, 'cUSDC', 'Compound USD Coin')
+    ],
+    [USDC, USDT],
+    [DAI, USDT]
   ]
 }
 
-const TESTNET_CAPABLE_WALLETS = {
+export interface WalletInfo {
+  connector?: AbstractConnector
+  name: string
+  iconName: string
+  description: string
+  href: string | null
+  color: string
+  primary?: true
+  mobile?: true
+  mobileOnly?: true
+}
+
+export const SUPPORTED_WALLETS: { [key: string]: WalletInfo } = {
   INJECTED: {
     connector: injected,
     name: 'Injected',
@@ -88,61 +93,52 @@ const TESTNET_CAPABLE_WALLETS = {
     description: 'Easy-to-use browser extension.',
     href: null,
     color: '#E8831D'
+  },
+  WALLET_CONNECT: {
+    connector: walletconnect,
+    name: 'WalletConnect',
+    iconName: 'walletConnectIcon.svg',
+    description: 'Connect to Trust Wallet, Rainbow Wallet and more...',
+    href: null,
+    color: '#4196FC',
+    mobile: true
+  },
+  WALLET_LINK: {
+    connector: walletlink,
+    name: 'Coinbase Wallet',
+    iconName: 'coinbaseWalletIcon.svg',
+    description: 'Use Coinbase Wallet app on mobile device',
+    href: null,
+    color: '#315CF5'
+  },
+  COINBASE_LINK: {
+    name: 'Open in Coinbase Wallet',
+    iconName: 'coinbaseWalletIcon.svg',
+    description: 'Open in Coinbase Wallet app.',
+    href: 'https://go.cb-w.com/mtUDhEZPy1',
+    color: '#315CF5',
+    mobile: true,
+    mobileOnly: true
+  },
+  FORTMATIC: {
+    connector: fortmatic,
+    name: 'Fortmatic',
+    iconName: 'fortmaticIcon.png',
+    description: 'Login using Fortmatic hosted wallet',
+    href: null,
+    color: '#6748FF',
+    mobile: true
+  },
+  Portis: {
+    connector: portis,
+    name: 'Portis',
+    iconName: 'portisIcon.png',
+    description: 'Login using Portis hosted wallet',
+    href: null,
+    color: '#4A6C9B',
+    mobile: true
   }
 }
-
-export const SUPPORTED_WALLETS =
-  process.env.REACT_APP_CHAIN_ID !== '1'
-    ? TESTNET_CAPABLE_WALLETS
-    : {
-        ...TESTNET_CAPABLE_WALLETS,
-        ...{
-          WALLET_CONNECT: {
-            connector: walletconnect,
-            name: 'WalletConnect',
-            iconName: 'walletConnectIcon.svg',
-            description: 'Connect to Trust Wallet, Rainbow Wallet and more...',
-            href: null,
-            color: '#4196FC',
-            mobile: true
-          },
-          WALLET_LINK: {
-            connector: walletlink,
-            name: 'Coinbase Wallet',
-            iconName: 'coinbaseWalletIcon.svg',
-            description: 'Use Coinbase Wallet app on mobile device',
-            href: null,
-            color: '#315CF5'
-          },
-          COINBASE_LINK: {
-            name: 'Open in Coinbase Wallet',
-            iconName: 'coinbaseWalletIcon.svg',
-            description: 'Open in Coinbase Wallet app.',
-            href: 'https://go.cb-w.com/mtUDhEZPy1',
-            color: '#315CF5',
-            mobile: true,
-            mobileOnly: true
-          },
-          FORTMATIC: {
-            connector: fortmatic,
-            name: 'Fortmatic',
-            iconName: 'fortmaticIcon.png',
-            description: 'Login using Fortmatic hosted wallet',
-            href: null,
-            color: '#6748FF',
-            mobile: true
-          },
-          Portis: {
-            connector: portis,
-            name: 'Portis',
-            iconName: 'portisIcon.png',
-            description: 'Login using Portis hosted wallet',
-            href: null,
-            color: '#4A6C9B',
-            mobile: true
-          }
-        }
-      }
 
 export const NetworkContextName = 'NETWORK'
 
